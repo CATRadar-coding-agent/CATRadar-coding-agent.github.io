@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <meta name="title" content="Successful Rollouts are Not Equal: Discovering Influential Behaviors for Training Coding Agents">
+  <meta name="description" content="CATRadar automatically discovers demonstration behaviors that affect coding agent training, such as repo-exploration strategies, planning and verification patterns, and the verbosity of reasoning text.">
+  <meta name="keywords" content="coding agent, coding agent training, demonstrations, distillation, SWE-Bench, LLM agents">
+  <meta name="author" content="Yiqing Xie, Gaokai Zhang, Xingyao Wang, Dan Roth, Daniel Fried, Carolyn Rose">
+
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Successful Rollouts are Not Equal: Discovering Influential Behaviors for Training Coding Agents">
+  <meta property="og:description" content="CATRadar automatically discovers demonstration behaviors that affect coding agent training.">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <meta name="theme-color" content="#2563eb">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <title>Successful Rollouts are Not Equal: Discovering Influential Behaviors for Training Coding Agents</title>
+
+  <link rel="icon" type="image/svg+xml" href="static/images/favicon.svg">
+
+  <link rel="stylesheet" href="static/css/bulma.min.css">
+  <link rel="stylesheet" href="static/css/index.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <script defer src="static/js/fontawesome.all.min.js"></script>
+  <script defer src="static/js/index.js"></script>
+
+  <style>
+    .results-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+      margin: 1.5rem 0;
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .results-table th {
+      background: #1e293b;
+      color: white;
+      padding: 10px 12px;
+      text-align: center;
+      font-weight: 600;
+      font-size: 0.8rem;
+      white-space: nowrap;
+    }
+    .results-table td {
+      padding: 8px 12px;
+      text-align: center;
+      border-bottom: 1px solid #e2e8f0;
+      font-size: 0.82rem;
+      white-space: nowrap;
+    }
+    .results-table tr:hover {
+      background: #f8fafc;
+    }
+    .results-table td:first-child {
+      text-align: left;
+      font-weight: 500;
+    }
+    .results-table .section-header td {
+      background: #e6e6e6;
+      font-weight: 700;
+      font-style: italic;
+      text-align: left;
+      color: #1e293b;
+    }
+    .results-table .subset-header td {
+      font-style: italic;
+      text-align: left;
+      color: #475569;
+    }
+    .results-table .indent {
+      padding-left: 28px;
+    }
+    .results-table .ours-row {
+      background: #eff6ff;
+    }
+    .results-table .ours-row:hover {
+      background: #dbeafe;
+    }
+    .hero > .container {
+      width: 100%;
+      min-width: 0;
+    }
+    .compact-table th, .compact-table td {
+      padding: 7px 5px;
+      font-size: 0.76rem;
+    }
+    .compact-table th:first-child {
+      white-space: normal;
+    }
+    .compact-table .sig-gain, .compact-table .sig-loss, .compact-table .gain, .compact-table .loss {
+      font-size: 0.7rem;
+      padding: 1px 2px;
+    }
+    .compact-table td:first-child, .compact-table th:first-child {
+      padding-left: 12px;
+    }
+    .compact-table td.indent {
+      padding-left: 24px;
+    }
+    .behavior-table td {
+      white-space: normal;
+    }
+    .behavior-table td:nth-child(2) {
+      text-align: left;
+      color: #475569;
+    }
+    .behavior-table td:first-child {
+      white-space: nowrap;
+    }
+    .gain {
+      color: #218a3b;
+      font-size: 0.75rem;
+    }
+    .loss {
+      color: #c82506;
+      font-size: 0.75rem;
+    }
+    .sig-gain, .sig-gain-one, .sig-loss {
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 1px 4px;
+      border-radius: 4px;
+    }
+    .sig-gain {
+      color: #218a3b;
+      background: #e2edbf;
+    }
+    .sig-gain-one {
+      color: #218a3b;
+      background: #f4f8e6;
+      box-shadow: inset 0 0 0 1px #d7e4a6;
+    }
+    .sig-loss {
+      color: #c82506;
+      background: #ffd6d6;
+    }
+    .check {
+      color: #218a3b;
+      font-weight: 700;
+    }
+    .untested {
+      color: #64748b;
+      font-weight: 700;
+    }
+    .section-subtitle {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #1e293b;
+      margin: 2.5rem 0 1rem;
+    }
+    .section-text {
+      color: #475569;
+      max-width: 820px;
+      margin: 0 auto 1rem;
+      line-height: 1.7;
+    }
+    .table-caption {
+      font-size: 0.9rem;
+      color: #64748b;
+      margin-top: 0.5rem;
+      text-align: center;
+      max-width: 820px;
+      margin-left: auto;
+      margin-right: auto;
+      line-height: 1.5;
+    }
+    .figure-container {
+      text-align: center;
+      margin: 2rem 0 0;
+    }
+    .figure-container img {
+      max-width: 100%;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .figure-caption {
+      font-size: 0.9rem;
+      color: #64748b;
+      margin-top: 0.75rem;
+      text-align: center;
+      max-width: 800px;
+      margin-left: auto;
+      margin-right: auto;
+      line-height: 1.5;
+    }
+    .subfigure-label {
+      font-size: 0.9rem;
+      color: #64748b;
+      margin-top: 0.5rem;
+    }
+    .task-card {
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 1.5rem;
+      height: 100%;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    .task-card h4 {
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 0.5rem;
+    }
+    .task-card p {
+      color: #64748b;
+      font-size: 0.95rem;
+      margin-bottom: 0;
+    }
+    .key-result {
+      display: inline-block;
+      background: linear-gradient(135deg, #eff6ff, #dbeafe);
+      border: 1px solid #93c5fd;
+      border-radius: 8px;
+      padding: 0.5rem 1rem;
+      margin: 0.25rem;
+      font-weight: 600;
+      color: #1e40af;
+      font-size: 0.9rem;
+    }
+    .callout {
+      margin: 1.5rem auto 0;
+      border: 2px solid #2563eb;
+      border-radius: 10px;
+      padding: 0.75rem 1.25rem;
+      background: #f0f5ff;
+      text-align: center;
+      max-width: 640px;
+    }
+    .table-wrapper {
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+    .publication-title {
+      font-size: 1.875rem !important;
+    }
+    .overview-row {
+      display: flex;
+      gap: 2rem;
+      align-items: flex-start;
+    }
+    .overview-row > div {
+      min-width: 0;
+    }
+    .overview-row img {
+      width: 100%;
+    }
+    .tool-name {
+      font-variant: small-caps;
+      font-weight: 700;
+    }
+    .figure-container img.narrow-65 {
+      max-width: 65%;
+    }
+    .figure-container img.narrow-60 {
+      max-width: 60%;
+    }
+    @media screen and (max-width: 768px) {
+      .publication-title {
+        font-size: 1.5rem !important;
+      }
+      .overview-row {
+        flex-direction: column;
+      }
+      .figure-container img.narrow-65, .figure-container img.narrow-60 {
+        max-width: 100%;
+      }
+      .results-table {
+        font-size: 0.7rem;
+      }
+      .results-table th, .results-table td {
+        padding: 6px 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <button class="scroll-to-top" onclick="scrollToTop()" title="Scroll to top" aria-label="Scroll to top">
+    <i class="fas fa-chevron-up"></i>
+  </button>
+
+  <main id="main-content">
+
+  <!-- Title -->
+  <section class="hero">
+    <div class="hero-body">
+      <div class="container is-max-desktop">
+        <div class="columns is-centered">
+          <div class="column has-text-centered">
+            <h1 class="title is-2 publication-title">Successful Rollouts are Not Equal:<br>Discovering Influential Behaviors for Training Coding Agents</h1>
+            <div class="is-size-5 publication-authors">
+              <span class="author-block"><a href="https://yiqingxyq.github.io/" target="_blank">Yiqing Xie</a><sup>1</sup>,</span>
+              <span class="author-block"><a href="https://gaokaizhang.github.io/" target="_blank">Gaokai Zhang</a><sup>1</sup>,</span>
+              <span class="author-block"><a href="https://xingyaoww.github.io/" target="_blank">Xingyao Wang</a><sup>2</sup>,</span>
+              <span class="author-block"><a href="https://www.cis.upenn.edu/~danroth/" target="_blank">Dan Roth</a><sup>3</sup>,</span>
+              <span class="author-block"><a href="https://dpfried.github.io/" target="_blank">Daniel Fried</a><sup>1</sup>,</span>
+              <span class="author-block"><a href="https://www.cs.cmu.edu/~cprose/" target="_blank">Carolyn Ros&eacute;</a><sup>1</sup></span>
+            </div>
+
+            <div class="is-size-5 publication-authors">
+              <span class="author-block"><sup>1</sup>Carnegie Mellon University</span>
+              <span class="author-block"><sup>2</sup>University of Illinois Urbana-Champaign</span>
+              <span class="author-block"><sup>3</sup>University of Pennsylvania</span>
+            </div>
+
+            <div class="column has-text-centered">
+              <div class="publication-links">
+                <span class="link-block">
+                  <a href="static/pdfs/CATRadar.pdf" target="_blank"
+                  class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon"><i class="fas fa-file-pdf"></i></span>
+                    <span>Paper</span>
+                  </a>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Overview -->
+  <section class="section hero is-light">
+    <div class="container is-max-desktop">
+      <h2 class="title is-3 has-text-centered">Overview</h2>
+      <div class="overview-row">
+        <!-- flex-grow = image aspect ratio, so both figures get the same height -->
+        <div style="flex: 1.375 1 0;">
+          <div class="figure-container" style="margin-top: 0;">
+            <img src="static/images/overview.png" alt="Manual hypotheses by domain experts versus automatic candidate discovery with CATRadar, and the five findings">
+          </div>
+          <p class="figure-caption">
+            To find demonstration behaviors that affect the effectiveness of training, (<em>left</em>) prior works rely on human experts to manually make hypotheses, while (<em>right</em>) <span class="tool-name">CATRadar</span> narrows down the search space by automatically discovering candidate behaviors by extracting and comparing the behaviors of different trained agents.
+          </p>
+        </div>
+        <div style="flex: 1.12 1 0;">
+          <div class="figure-container" style="margin-top: 0;">
+            <img src="static/images/teacher_vs_student.png" alt="Teacher resolved rate versus student resolved rate for R2E-Gym and Hybrid-Gym teachers">
+          </div>
+          <p class="figure-caption">
+            Across different training sets, on the same sets of task instances, successful demonstrations generated by different teacher models lead to substantially different performance, and higher teacher performance does not necessarily transfer to better student performance.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Abstract -->
+  <section class="section">
+    <div class="container is-max-desktop">
+      <div class="columns is-centered has-text-centered">
+        <div class="column is-four-fifths">
+          <h2 class="title is-3">Abstract</h2>
+          <div class="content has-text-justified">
+            <p>
+              Most coding agent training methods judge the quality of demonstrations based on their final outcome, such as execution results or rubric scores.
+              However, we observe that the effectiveness of training also substantially depends on <em>how</em> the demonstrations achieve the results.
+              Previous work has manually made hypotheses about which demonstration behaviors influence the performance.
+              To find such influential behaviors for <strong>C</strong>oding <strong>A</strong>gent <strong>T</strong>raining more efficiently, we present <span class="tool-name">CATRadar</span>, an analysis method to automatically discover candidate behaviors by defining, extracting, and comparing the behaviors of different trained agents.
+              <span class="tool-name">CATRadar</span> enables us to find behaviors that are influential to at least one model, including specific repo-exploration strategies, the planning and verification patterns, and the verbosity of the reasoning text.
+              Our insights also translate to performance gains by various methods, including data selection, agent step synthesis, and behavior-conditioned rollout.
+              Results show that our agent step synthesis method improves Qwen3-8B's resolved rate from <strong>11.6%</strong> to <strong>17.6%</strong> on SWE-Bench Verified.
+            </p>
+          </div>
+          <div class="has-text-centered" style="margin-top: 1.5rem;">
+            <span class="key-result">8 teachers &times; 3 students</span>
+            <span class="key-result">7 of 10 examined behaviors affect at least one model</span>
+            <span class="key-result">Qwen3-8B: 11.6% &rarr; 17.6% on SWE-Bench Verified</span>
+          </div>
+          <div class="callout">
+            <span style="font-weight: 700; color: #1e293b;">Successful rollouts are not equal</span><br>
+            <span style="color: #475569; font-size: 0.95rem;">Same training instances, same student, only successful demonstrations: different teachers still lead to substantially different students</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Method -->
+  <section class="section hero is-light">
+    <div class="container is-max-desktop">
+      <h2 class="title is-3 has-text-centered"><span class="tool-name">CATRadar</span>: Automatic Candidate Behavior Discovery</h2>
+      <div class="figure-container" style="margin-top: 0;">
+        <img src="static/images/framework.png" alt="CATRadar framework: rollout, discover behavioral differences, verify distinguishability, scale up">
+      </div>
+      <p class="figure-caption">
+        We run two trained coding agents on the same task instances, use a discovery agent to propose behavioral differences with a well-defined judge metric, and verify the distinguishability of each behavior by fitting a logistic regression.
+      </p>
+
+      <div class="columns is-multiline" style="margin-top: 2rem;">
+        <div class="column is-4">
+          <div class="task-card">
+            <h4>Rollout and Discover</h4>
+            <p>A discovery agent (e.g., Claude-Opus-4.7) compares the paired trajectories of two agents and proposes behavioral differences. Each behavior comes with a judge metric, computed by a script or an LLM judge; only well-defined metrics are kept.</p>
+          </div>
+        </div>
+        <div class="column is-4">
+          <div class="task-card">
+            <h4>Verify Distinguishability</h4>
+            <p>We score each trajectory with the judge metric and fit a logistic regression that predicts which agent produced it. A behavior is distinguishing if the Wald test gives p&nbsp;&lt;&nbsp;0.01 (N&nbsp;=&nbsp;50 trajectories per agent).</p>
+          </div>
+        </div>
+        <div class="column is-4">
+          <div class="task-card">
+            <h4>Scale Up</h4>
+            <p>Verified behaviors join the candidate list, and the discovery agent is asked for further differences, for at most k&nbsp;=&nbsp;5 iterations per task set and agent pair, across multiple training tasks and agent pairs.</p>
+          </div>
+        </div>
+      </div>
+
+      <p class="section-text" style="margin-top: 1.5rem;">
+        We then test each candidate with controlled <strong>data interventions</strong> that change only the target behavior in the training demonstrations: <strong>trajectory post-editing</strong> adds, modifies, or removes steps while keeping every retained step supported by its preceding context, and <strong>behavior-conditioned generation</strong> prompts the teacher to exhibit the behavior on the same instances.
+        A behavior is <strong>influential</strong> if its presence or absence leads to a substantial performance change.
+      </p>
+    </div>
+  </section>
+
+  <!-- Discovered behaviors -->
+  <section class="section">
+    <div class="container is-max-desktop">
+      <h2 class="title is-3 has-text-centered">Discovered Behaviors</h2>
+      <p class="section-text">
+        We apply <span class="tool-name">CATRadar</span> to 8 teacher models and 3 student models (Qwen2.5Coder-7B, Qwen3-4B, Qwen3-8B), trained on R2E-Gym issue-solving and Hybrid-Gym function localization and evaluated on SWE-Bench Verified with the OpenHands agent harness.
+        Compared with the behaviors manually hypothesized in prior work, <span class="tool-name">CATRadar</span> discovers a broader range of behaviors, spanning trajectory-level features, problem-solving strategies, and tool-use patterns.
+      </p>
+      <div class="table-wrapper">
+        <table class="results-table behavior-table">
+          <thead>
+            <tr>
+              <th>Behavior</th>
+              <th>Judge Metric</th>
+              <th>LEGO</th>
+              <th>Hybrid</th>
+              <th>Others</th>
+              <th>Ours</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Multi-round search</td><td>Run keyword searching commands for &ge; 2 times</td><td></td><td></td><td></td><td class="check">&#10003;</td></tr>
+            <tr><td>Has fine-grained keywords</td><td>Search for fine-grained keywords (e.g., specific filenames) instead of only broad keywords (e.g., <code>def</code> or <code>class</code>)</td><td></td><td></td><td></td><td class="check">&#10003;</td></tr>
+            <tr><td>Limit target files before read</td><td>Limit the candidates to &le; 30 files before reading any file</td><td></td><td></td><td></td><td class="check">&#10003;</td></tr>
+            <tr><td>Use task-tracker</td><td>Use the <code>&lt;function=task_tracker&gt;</code> tool for explicit reasoning</td><td></td><td></td><td></td><td class="check">&#10003;</td></tr>
+            <tr><td>Verify after edit</td><td>Has verification steps after the final file-editing action</td><td class="check">&#10003;</td><td></td><td></td><td class="check">&#10003;</td></tr>
+            <tr><td>Use think</td><td>Use the <code>&lt;function=think&gt;</code> tool for explicit reasoning</td><td></td><td></td><td></td><td class="check">&#10003;</td></tr>
+            <tr><td>Reasoning text verbosity</td><td>The length of the text part outside tool calls</td><td></td><td class="check">&#10003;</td><td></td><td class="check">&#10003;</td></tr>
+            <tr><td>Stuck in loop</td><td>Try different commands after failing for 3 times</td><td class="untested">U</td><td></td><td></td><td class="untested">U</td></tr>
+            <tr><td>Exploration length</td><td>The number of actions before the first file-editing action (&ge; 16: high; 6&ndash;15: medium; &le; 5: low)</td><td></td><td></td><td></td><td class="untested">U</td></tr>
+            <tr><td>Trajectory length</td><td>Has &le; 7 agent actions: short; &ge; 8 agent actions: long</td><td class="untested">U</td><td class="check">&#10003;</td><td class="check">&#10003;</td><td class="untested">U</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="table-caption">Some of the behaviors discovered and examined by our framework. &ldquo;&#10003;&rdquo;: the behavior is shown to be relevant to the final performance for some student models; &ldquo;U&rdquo;: the behavior is tested but not shown to be relevant. &ldquo;LEGO&rdquo; (Terminal-LEGO), &ldquo;Hybrid&rdquo; (Hybrid-Gym), and &ldquo;Others&rdquo; refer to existing works.</p>
+    </div>
+  </section>
+
+  <!-- Findings -->
+  <section class="section hero is-light">
+    <div class="container is-max-desktop">
+      <h2 class="title is-3 has-text-centered">What Behaviors Affect Coding Agent Training?</h2>
+
+      <h3 class="section-subtitle has-text-centered" style="margin-top: 0;">Trajectory-level features are not good indicators</h3>
+      <p class="section-text">
+        Longer trajectories and stronger teachers are commonly assumed to give better training data, but neither is significantly correlated with student performance.
+      </p>
+      <div class="columns is-centered">
+        <div class="column is-5 has-text-centered">
+          <div class="figure-container" style="margin-top: 0.5rem;">
+            <img src="static/images/teacher_acc_student_acc.png" alt="Student performance versus teacher performance, p-value 0.687">
+          </div>
+          <p class="subfigure-label">(a) Teacher performance</p>
+        </div>
+        <div class="column is-5 has-text-centered">
+          <div class="figure-container" style="margin-top: 0.5rem;">
+            <img src="static/images/teacher_len_student_acc.png" alt="Student performance versus teacher trajectory length, p-value 0.422">
+          </div>
+          <p class="subfigure-label">(b) Trajectory length</p>
+        </div>
+      </div>
+      <p class="figure-caption">Student performance (Qwen2.5Coder-7B) is not significantly correlated with trajectory-level features such as teacher success rate or trajectory length.</p>
+
+      <h3 class="section-subtitle has-text-centered">Effective repo-exploration strategies</h3>
+      <p class="section-text">
+        Prior work checks whether a demonstration explores the repository sufficiently, but not <em>how</em>.
+        <span class="tool-name">CATRadar</span> identifies two concrete strategies:
+        <strong>Multi-Search</strong>, which searches for multiple keywords iteratively, and
+        <strong>Target-Read</strong>, which only reads a file after narrowing down the target to a few files.
+        Demonstrations with both strategies improve training (<a href="#data-selection">Method 1</a> and <a href="#behavior-conditioned">Method 3</a>).
+      </p>
+
+      <h3 class="section-subtitle has-text-centered">Planning steps have different effects on different models</h3>
+      <p class="section-text">
+        We remove all task-tracker actions (a to-do-list tool in OpenHands) from Claude-Opus-4.5 demonstrations.
+        Their presence improves Qwen2.5Coder-7B and Qwen3-8B, while degrading Qwen3-4B.
+      </p>
+      <div class="figure-container" style="margin-top: 1rem;">
+        <img src="static/images/task_tracker_ablation.png" alt="Effect of removing task-tracker actions for three student models" class="narrow-65">
+      </div>
+      <p class="figure-caption">Planning steps in demonstrations have different effects on different models. Bold labels mark significant performance changes after removing all task-tracker actions from demonstrations (p-value &lt; 0.05).</p>
+
+      <h3 class="section-subtitle has-text-centered">Verification transfers from simple to complex tasks</h3>
+      <p class="section-text">
+        <strong>Remove Verify</strong> removes all steps after the last file-editing action; <strong>Add Verify</strong>, for demonstrations without any verification steps, copies the verification steps from another agent's demonstration of the same instance.
+        Students trained on function-localization demonstrations with more verification steps also verify more on issue-solving.
+        Verification improves the 7B and 8B models, but does not consistently improve Qwen3-4B.
+      </p>
+      <div class="table-wrapper">
+        <table class="results-table compact-table">
+          <thead>
+            <tr>
+              <th rowspan="2" style="vertical-align: middle;">Teacher Model (Hybrid-Gym)</th>
+              <th>Teacher</th>
+              <th colspan="4">Qwen2.5Coder-7B</th>
+              <th colspan="4">Qwen3-4B</th>
+              <th colspan="4">Qwen3-8B</th>
+            </tr>
+            <tr>
+              <th># Verify</th>
+              <th># Verify</th><th>Res%</th><th>Loc%</th><th>Patch%</th>
+              <th># Verify</th><th>Res%</th><th>Loc%</th><th>Patch%</th>
+              <th># Verify</th><th>Res%</th><th>Loc%</th><th>Patch%</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Opus-4.5</td>
+              <td><strong>4.4</strong></td>
+              <td><strong>13.3</strong></td><td><strong>13.6</strong></td><td><strong>42.8</strong></td><td><strong>57.2</strong></td>
+              <td><strong>11.6</strong></td><td>16.0</td><td>43.0</td><td>55.0</td>
+              <td><strong>14.4</strong></td><td><strong>17.2</strong></td><td><strong>41.4</strong></td><td><strong>54.6</strong></td>
+            </tr>
+            <tr>
+              <td class="indent">Remove Verify</td>
+              <td>0.0</td>
+              <td>8.9</td><td>11.0 <span class="sig-loss">(-2.6)</span></td><td>39.6</td><td>53.0</td>
+              <td>7.0</td><td><strong>18.6</strong> <span class="sig-gain">(+2.6)</span></td><td><strong>46.4</strong></td><td><strong>60.2</strong></td>
+              <td>7.7</td><td>15.8 <span class="loss">(-1.4)</span></td><td>37.4</td><td>50.9</td>
+            </tr>
+            <tr>
+              <td>Opus-4.7</td>
+              <td>1.1</td>
+              <td>4.3</td><td>9.4</td><td>32.8</td><td>47.8</td>
+              <td>4.7</td><td>12.2</td><td>33.4</td><td>46.8</td>
+              <td>9.3</td><td>11.6</td><td>30.2</td><td>45.4</td>
+            </tr>
+            <tr>
+              <td class="indent">Add Verify</td>
+              <td><strong>4.2</strong></td>
+              <td><strong>11.2</strong></td><td><strong>10.8</strong> <span class="gain">(+1.4)</span></td><td><strong>34.0</strong></td><td><strong>54.2</strong></td>
+              <td><strong>9.9</strong></td><td><strong>13.4</strong> <span class="gain">(+1.2)</span></td><td><strong>38.4</strong></td><td><strong>50.8</strong></td>
+              <td><strong>15.2</strong></td><td><strong>15.0</strong> <span class="sig-gain">(+3.4)</span></td><td><strong>36.2</strong></td><td><strong>50.8</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="table-caption">Verification procedure in a simple training task (e.g., function localization) transfers to more complex tasks (e.g., issue-solving). However, the effect of verification steps depends on the student and teacher model. We highlight significant <span class="sig-gain">increases</span> and <span class="sig-loss">decreases</span> in resolved rates (p-value &lt; 0.05).</p>
+
+      <h3 class="section-subtitle has-text-centered">Verbosity of reasoning text affects trajectory length</h3>
+      <p class="section-text">
+        We prompt an LLM to rewrite the reasoning text (the non-tool-call text and the content of &ldquo;think&rdquo; actions) to be shorter or longer in proportion to its original length, without adding new information; &ldquo;0x&rdquo; removes all reasoning text.
+      </p>
+      <div class="figure-container" style="margin-top: 1rem;">
+        <img src="static/images/verbosity.png" alt="Trajectory length and resolved rate as the verbosity of reasoning text changes" class="narrow-60">
+      </div>
+      <p class="figure-caption">When the verbosity of reasoning text increases (including non-tool-call text and content of the &ldquo;think&rdquo; actions), the trajectory length in general increases, and the performance first increases and then decreases.</p>
+    </div>
+  </section>
+
+  <!-- Practical utility -->
+  <section class="section">
+    <div class="container is-max-desktop">
+      <h2 class="title is-3 has-text-centered">Practical Utility of Our Discoveries</h2>
+      <p class="section-text">
+        We apply the discoveries through three methods, ordered by increasing data-construction cost.
+      </p>
+
+      <h3 class="section-subtitle has-text-centered" id="data-selection">Method 1: Behavior-aware data selection</h3>
+      <p class="section-text">
+        Under a fixed training-data budget, we keep demonstrations with both <strong>Multi-Search</strong> (at least three keyword searches) and <strong>Target-Read</strong> (narrow down to &le; 50 candidate files before reading), and compare against equally sized subsets lacking either strategy.
+      </p>
+      <div class="table-wrapper">
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th rowspan="2" style="vertical-align: middle;">Teacher Model</th>
+              <th colspan="3">Qwen2.5Coder-7B</th>
+              <th colspan="3">Qwen3-4B</th>
+              <th colspan="3">Qwen3-8B</th>
+            </tr>
+            <tr>
+              <th>Res%</th><th>Loc%</th><th>Patch%</th>
+              <th>Res%</th><th>Loc%</th><th>Patch%</th>
+              <th>Res%</th><th>Loc%</th><th>Patch%</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="section-header"><td colspan="10">Training: R2E-Gym Issue-Solving</td></tr>
+            <tr class="subset-header"><td colspan="10">GPT5-mini Subsets (250 examples)</td></tr>
+            <tr>
+              <td class="indent">w/o Multi-Search</td>
+              <td>9.0</td><td>34.4</td><td>52.4</td>
+              <td>10.0</td><td>43.8</td><td>62.2</td>
+              <td>10.2</td><td>43.8</td><td>60.4</td>
+            </tr>
+            <tr>
+              <td class="indent">w/o Target-Read</td>
+              <td>8.6</td><td>36.2</td><td>52.0</td>
+              <td>13.2</td><td>48.8</td><td>62.4</td>
+              <td>10.4</td><td>42.4</td><td>56.6</td>
+            </tr>
+            <tr class="ours-row">
+              <td class="indent"><strong>Both Strategies (ours)</strong></td>
+              <td><strong>11.4</strong> <span class="sig-gain-one">(+2.8)</span></td><td><strong>49.4</strong></td><td><strong>63.6</strong></td>
+              <td><strong>14.2</strong> <span class="sig-gain-one">(+4.2)</span></td><td><strong>58.4</strong></td><td><strong>75.4</strong></td>
+              <td><strong>13.8</strong> <span class="sig-gain">(+3.6)</span></td><td><strong>48.2</strong></td><td><strong>63.2</strong></td>
+            </tr>
+            <tr class="section-header"><td colspan="10">Training: Hybrid-Gym Func-Localize</td></tr>
+            <tr class="subset-header"><td colspan="10">Claude-Opus-4.5 Subsets (250 examples)</td></tr>
+            <tr>
+              <td class="indent">w/o Multi-Search</td>
+              <td>2.8</td><td>13.6</td><td>31.6</td>
+              <td>11.8</td><td><strong>38.0</strong></td><td><strong>51.4</strong></td>
+              <td>4.8</td><td>15.2</td><td>29.2</td>
+            </tr>
+            <tr>
+              <td class="indent">w/o Target-Read</td>
+              <td>5.4</td><td>17.6</td><td>33.0</td>
+              <td>8.0</td><td>16.6</td><td>44.0</td>
+              <td>5.8</td><td>15.4</td><td>30.4</td>
+            </tr>
+            <tr class="ours-row">
+              <td class="indent"><strong>Both Strategies (ours)</strong></td>
+              <td><strong>7.2</strong> <span class="sig-gain">(+4.4)</span></td><td><strong>21.2</strong></td><td><strong>39.0</strong></td>
+              <td><strong>13.2</strong> <span class="sig-gain-one">(+5.2)</span></td><td>35.4</td><td>50.8</td>
+              <td><strong>11.6</strong> <span class="sig-gain">(+6.8)</span></td><td><strong>28.4</strong></td><td><strong>41.8</strong></td>
+            </tr>
+            <tr class="subset-header"><td colspan="10">Claude-Opus-4.7 Subsets (350 examples)</td></tr>
+            <tr>
+              <td class="indent">w/o Multi-Search</td>
+              <td>2.8</td><td>15.8</td><td>42.8</td>
+              <td>7.2</td><td><strong>27.5</strong></td><td><strong>40.0</strong></td>
+              <td>8.6</td><td>26.8</td><td><strong>40.2</strong></td>
+            </tr>
+            <tr>
+              <td class="indent">w/o Target-Read</td>
+              <td>3.4</td><td>9.4</td><td>25.0</td>
+              <td>7.6</td><td>20.6</td><td>33.6</td>
+              <td>4.2</td><td>11.8</td><td>26.8</td>
+            </tr>
+            <tr class="ours-row">
+              <td class="indent"><strong>Both Strategies (ours)</strong></td>
+              <td><strong>6.0</strong> <span class="sig-gain">(+3.2)</span></td><td><strong>27.2</strong></td><td><strong>61.4</strong></td>
+              <td><strong>9.6</strong> <span class="gain">(+2.4)</span></td><td>25.8</td><td>36.8</td>
+              <td><strong>10.2</strong> <span class="sig-gain-one">(+6.0)</span></td><td><strong>27.2</strong></td><td>39.4</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="table-caption">Data selection results on SWE-Bench Verified. Parenthesized results are absolute gains compared to the lower resolved rate of the two ablations. We highlight gains for resolved rates that are significantly better than <span class="sig-gain">both ablations</span> and <span class="sig-gain-one">one of the ablations</span> (p-value &lt; 0.05).</p>
+
+      <h3 class="section-subtitle has-text-centered" id="step-synthesis">Method 2: Adding synthesized agent steps</h3>
+      <p class="section-text">
+        We prompt an LLM to generate a task-tracker call for each function localization demonstration with a to-do list: identify the target file, locate the function, generate its docstring, and verify correctness.
+        Subsequent task-tracker calls update the items at completion points, giving four synthesized task-tracker actions per demonstration.
+        Although we train on function localization, the issue-solving resolved rate improves in all evaluated settings.
+      </p>
+      <div class="table-wrapper">
+        <table class="results-table" style="max-width: 640px; margin-left: auto; margin-right: auto;">
+          <thead>
+            <tr>
+              <th>Training Setting (Teacher &rarr; Student)</th>
+              <th>Res%</th>
+              <th>Loc%</th>
+              <th>Patch%</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="section-header"><td colspan="4">Training: Hybrid-Gym Func-Localize</td></tr>
+            <tr><td>GPT-5-mini &rarr; Qwen2.5Coder-7B</td><td>6.0</td><td><strong>44.6</strong></td><td><strong>66.2</strong></td></tr>
+            <tr class="ours-row"><td class="indent">Add task-tracker</td><td><strong>9.6</strong> <span class="sig-gain">(+3.6)</span></td><td>33.2</td><td>48.4</td></tr>
+            <tr><td>GPT-5-mini &rarr; Qwen3-8B</td><td>10.8</td><td><strong>56.6</strong></td><td><strong>71.6</strong></td></tr>
+            <tr class="ours-row"><td class="indent">Add task-tracker</td><td><strong>13.0</strong> <span class="gain">(+2.2)</span></td><td>49.2</td><td>61.6</td></tr>
+            <tr><td>Opus-4.7 &rarr; Qwen2.5Coder-7B</td><td>9.4</td><td>32.8</td><td>47.8</td></tr>
+            <tr class="ours-row"><td class="indent">Add task-tracker</td><td><strong>12.2</strong> <span class="sig-gain">(+2.8)</span></td><td><strong>38.6</strong></td><td><strong>55.2</strong></td></tr>
+            <tr><td>Opus-4.7 &rarr; Qwen3-8B</td><td>11.6</td><td>30.2</td><td>45.4</td></tr>
+            <tr class="ours-row"><td class="indent">Add task-tracker</td><td><strong>17.6</strong> <span class="sig-gain">(+6.0)</span></td><td><strong>40.6</strong></td><td><strong>53.0</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="table-caption">Adding synthetic task-planning steps to training trajectories improves performance on SWE-Bench Verified. We highlight <span class="sig-gain">significant improvements</span> in resolved rates.</p>
+
+      <h3 class="section-subtitle has-text-centered" id="behavior-conditioned">Method 3: Behavior-conditioned demonstration generation</h3>
+      <p class="section-text">
+        We iteratively ask an agent to write a teacher prompt that elicits Multi-Search and Target-Read, generate a small set of demonstrations, and label them with an LLM judge, until the prompt significantly increases the share of demonstrations with these strategies (p&nbsp;&lt;&nbsp;0.05).
+        Training on the new demonstrations improves Qwen2.5Coder-7B from 6.0% to 9.2%, while directly prompting the student to follow the strategies gives a smaller gain (7.2%).
+      </p>
+      <div class="table-wrapper">
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th rowspan="2" style="vertical-align: middle;">Teacher Model</th>
+              <th colspan="3">Teacher (Hybrid-Gym Func-Loc)</th>
+              <th colspan="5">Student (SWE-Bench Verified)</th>
+            </tr>
+            <tr>
+              <th>Multi-Search%</th><th>Target-Read%</th><th>Res%</th>
+              <th>Multi-Search%</th><th>Target-Read%</th><th>Res%</th><th>Loc%</th><th>Patch%</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>GPT-5-mini</td>
+              <td>58.8</td><td>1.5</td><td><strong>89.7</strong></td>
+              <td>74.9</td><td>53.2</td><td>6.0</td><td>44.6</td><td>66.2</td>
+            </tr>
+            <tr>
+              <td class="indent">+ prompt student</td>
+              <td>58.8</td><td>1.5</td><td><strong>89.7</strong></td>
+              <td>75.6</td><td>57.6</td><td>7.2 <span class="gain">(+1.2)</span></td><td><strong>48.2</strong></td><td><strong>67.0</strong></td>
+            </tr>
+            <tr class="ours-row">
+              <td class="indent">+ prompt teacher</td>
+              <td><strong>72.5</strong></td><td><strong>10.4</strong></td><td>85.9</td>
+              <td><strong>78.2</strong></td><td><strong>64.3</strong></td><td><strong>9.2</strong> <span class="sig-gain">(+3.2)</span></td><td>43.4</td><td>55.6</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="table-caption">Student performance (Qwen2.5Coder-7B) on SWE-Bench Verified under different teacher models and prompting strategies. We highlight <span class="sig-gain">significant changes</span> in resolved rates.</p>
+    </div>
+  </section>
+
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="columns is-centered">
+        <div class="column is-8">
+          <div class="content">
+            <p>
+              This page was built using the <a href="https://github.com/eliahuhorwitz/Academic-project-page-template" target="_blank">Academic Project Page Template</a> which was adopted from the <a href="https://nerfies.github.io" target="_blank">Nerfies</a> project page.
+              You are free to borrow the source code of this website, we just ask that you link back to this page in the footer. <br> This website is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-sa/4.0/" target="_blank">Creative Commons Attribution-ShareAlike 4.0 International License</a>.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>
